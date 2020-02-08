@@ -18,6 +18,7 @@ var iface = flag.String("iface", "", "interface name for mac address detection")
 
 func main() {
 	flag.Parse()
+	log.ParseFlags()
 
 	log.Info("starting mobell proxy")
 

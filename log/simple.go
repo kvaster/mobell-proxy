@@ -42,12 +42,22 @@ type Handler struct {
 	mu              sync.Mutex
 	Writer          io.Writer
 	TimestampFormat string
+	colored         bool
 }
 
 func newColored(w io.Writer) *Handler {
 	return &Handler{
-		Writer: w,
+		Writer:          w,
 		TimestampFormat: "2006-01-02 15:04:05",
+		colored:         true,
+	}
+}
+
+func newPlain(w io.Writer) *Handler {
+	return &Handler{
+		Writer:          w,
+		TimestampFormat: "2006-01-02 15:04:05",
+		colored:         false,
 	}
 }
 
@@ -60,10 +70,19 @@ func (h *Handler) HandleLog(e *log.Entry) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ts := time.Now().Format(h.TimestampFormat)
-	fmt.Fprintf(h.Writer, "%s [\033[%dm%6s\033[0m] %s", ts, color, level, e.Message)
 
-	for _, name := range names {
-		fmt.Fprintf(h.Writer, " \033[%dm%s\033[0m=%v", color, name, e.Fields.Get(name))
+	if h.colored {
+		fmt.Fprintf(h.Writer, "%s [\033[%dm%6s\033[0m] %s", ts, color, level, e.Message)
+
+		for _, name := range names {
+			fmt.Fprintf(h.Writer, " \033[%dm%s\033[0m=%v", color, name, e.Fields.Get(name))
+		}
+	} else {
+		fmt.Fprintf(h.Writer, "%s [%6s] %s", ts, level, e.Message)
+
+		for _, name := range names {
+			fmt.Fprintf(h.Writer, " %s=%v", name, e.Fields.Get(name))
+		}
 	}
 
 	fmt.Fprintln(h.Writer)
