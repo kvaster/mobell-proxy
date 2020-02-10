@@ -1,5 +1,9 @@
 # Mobell Proxy
 
+**NOTICE:** this app is in still in development.
+Also it seems that we need to decode and re-encode frames, cause
+mobotix camera sends us key frames very rare.
+
 Mobell proxy is a server companion for [mobell](https://github.com/kvaster/mobell) android application.
 
 Mobell android app is working quit well, but there are two problems:
