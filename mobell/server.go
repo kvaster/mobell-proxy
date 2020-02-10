@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"context"
 	"mobell-proxy/log"
+	"mobell-proxy/mobell/codec"
 	"mobell-proxy/mobell/mxpeg"
 	"net"
 )
@@ -29,7 +30,12 @@ type Server struct {
 	runFinished chan struct{}
 
 	cmdCh chan func()
-	video [][]byte
+
+	codec *codec.Codec
+
+	dht      []byte
+	dqt      []byte
+	patchDxt bool
 }
 
 func New(listenAddr string, mobotixAddr string, mobotixUser string, mobotixPass string, mac string) *Server {
@@ -63,6 +69,8 @@ func (s *Server) Start() error {
 	}
 
 	s.connListener = ln
+
+	s.codec = codec.Create()
 
 	s.client.Start()
 
@@ -103,10 +111,13 @@ func (s *Server) Stop() {
 	log.Info("stopping server")
 	s.runCancel()
 	<-s.runFinished
+	s.codec.Destroy()
 	log.Info("stopped")
 }
 
 func (s *Server) OnStreamStart() {
+	s.codec.OnStreamStart()
+
 	c := s.client
 	c.SendCmdSilent("mode", []string{"mxpeg"})
 	c.SendCmdSilent("audiooutput", []string{"pcm16"})
@@ -144,9 +155,7 @@ func (s *Server) onBell(evt map[string]interface{}) bool {
 }
 
 func (s *Server) OnStreamStop() {
-	s.cmdCh <- func() {
-		s.video = nil
-	}
+	s.codec.OnStreamStop()
 }
 
 func (s *Server) OnEvent(_ map[string]interface{}) bool {
@@ -163,12 +172,28 @@ func (s *Server) sendVideo(data [] byte) {
 }
 
 func (s *Server) OnVideo(data []byte, frameStart bool) {
+	if !s.codec.OnVideoPacket(data) {
+		log.Error("error decoding video frame")
+		s.client.Reconnect()
+		return
+	}
+
 	s.cmdCh <- func() {
-		if frameStart {
-			s.video = nil
+		// we need to store dqt and dht from original stream
+		// we will patch motion frames with this values right after key frame generation
+		dqt, dht := mxpeg.ExtractDqtDht(data)
+		if dqt != nil {
+			s.dqt = dqt
+		}
+		if dht != nil {
+			s.dht = dht
 		}
 
-		s.video = append(s.video, data)
+		// patch
+		if s.patchDxt {
+			s.patchDxt = false
+			data = mxpeg.PatchDqtDht(data, s.dqt, s.dht)
+		}
 
 		s.sendVideo(data)
 	}
@@ -206,10 +231,13 @@ func (s *Server) enableVideo(conn *connection) {
 	s.cmdCh <- func() {
 		if !conn.videoEnabled {
 			conn.videoEnabled = true
-			for _, d := range s.video {
-				conn.send(d)
+			data := s.codec.EncodeFrame()
+			if data != nil {
+				conn.send(data)
 			}
 		}
+
+		s.patchDxt = true
 	}
 }
 

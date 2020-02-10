@@ -11,7 +11,6 @@ const APP0 = 0xE0
 const COM = 0xFE
 const DQT = 0xDB
 const DHT = 0xC4
-
 //const DRI = 0xDD
 const SOF0 = 0xC0
 const SOS = 0xDA

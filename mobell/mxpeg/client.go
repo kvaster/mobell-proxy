@@ -69,6 +69,13 @@ func (c *Client) Stop() {
 	<-c.runFinished
 }
 
+func (c *Client) Reconnect() {
+	s := (*stream.Stream)(atomic.LoadPointer(&c.stream))
+	if s != nil {
+		s.Close()
+	}
+}
+
 func (c *Client) run() {
 	for {
 		select {
