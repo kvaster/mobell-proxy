@@ -138,7 +138,7 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 	case "list_addressees":
 		r = [][]interface{}{{1, "MainBell", ""}}
 	case "trigger":
-		c.server.client.SendCmdSilent("trigger", params)
+		c.server.client.SendCmdSilent("trigger", params.v)
 	case "bell_ack":
 		isAck := params.arrGet(0).asBool()
 		if isAck {
