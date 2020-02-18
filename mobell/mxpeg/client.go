@@ -97,9 +97,9 @@ func (c *Client) run() {
 			// do nothing
 		}
 
-		log.Debug("connecting to mobotix")
+		c.log.Debug("connecting to mobotix")
 		c.runOnce()
-		log.Debug("connection terminated")
+		c.log.Debug("connection terminated")
 
 		waitCtx, waitCancel := context.WithTimeout(c.runCtx, time.Second*5)
 		_ = <-waitCtx.Done()
@@ -108,7 +108,7 @@ func (c *Client) run() {
 }
 
 func (c *Client) runOnce() {
-	s, err := stream.Connect(c.runCtx, c.mobotixAddr, time.Second*5)
+	s, err := stream.Connect(c.runCtx, c.mobotixAddr, time.Second*5, c.log)
 	if err != nil {
 		return
 	}
