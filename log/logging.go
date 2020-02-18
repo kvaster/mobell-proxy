@@ -35,7 +35,9 @@ func ParseFlags() {
 	}
 }
 
+type Interface = _log.Interface
 type Fields = _log.Fields
+var Log = _log.Log
 var WithFields = _log.WithFields
 var WithField = _log.WithField
 var WithError = _log.WithError

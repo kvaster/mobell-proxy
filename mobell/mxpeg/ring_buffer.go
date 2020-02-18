@@ -9,6 +9,7 @@ import (
 
 var ErrReadError = errors.New("read error")
 var ErrClosed = errors.New("connection closed")
+var ErrOverflow = errors.New("buffer overflow")
 
 type RingBuffer struct {
 	buf    []byte
@@ -18,23 +19,11 @@ type RingBuffer struct {
 	end    int
 	pos    int
 	reader io.Reader
+
+	log log.Interface
 }
 
-func Recover(err *error) {
-	if e := recover(); e != nil {
-		if e == ErrClosed {
-			*err = ErrClosed
-		} else if e == ErrReadError {
-			log.Error("error reading mxpeg packet")
-			*err = ErrReadError
-		} else {
-			log.WithField("error", e).Error("fatal error reading mxpeg packet")
-			panic(e)
-		}
-	}
-}
-
-func NewRingBuffer(size int, reader io.Reader) *RingBuffer {
+func NewRingBuffer(size int, reader io.Reader, log log.Interface) *RingBuffer {
 	s := 1
 	for s < size {
 		s <<= 1
@@ -45,6 +34,22 @@ func NewRingBuffer(size int, reader io.Reader) *RingBuffer {
 		size:   s,
 		mask:   s - 1,
 		reader: reader,
+		log:    log,
+	}
+}
+
+func (r *RingBuffer) Recover(err *error) {
+	if e := recover(); e != nil {
+		if e == ErrClosed {
+			*err = ErrClosed
+		} else if e == ErrReadError || e == ErrOverflow {
+			e := e.(error)
+			r.log.WithField("error", e.Error()).Error("ring buffer error")
+			*err = e
+		} else {
+			r.log.WithField("error", e).Error("ring buffer fatal error")
+			panic(e)
+		}
 	}
 }
 
@@ -63,8 +68,8 @@ func (r *RingBuffer) dist(pos int) int {
 }
 
 func (r *RingBuffer) read() {
-	if (r.end - r.start) >= r.size {
-		panic(ErrReadError)
+	if r.dist(r.end) >= (r.size - 1) {
+		panic(ErrOverflow)
 	}
 
 	var b []byte
@@ -80,7 +85,6 @@ func (r *RingBuffer) read() {
 		if strings.Contains(err.Error(), "use of closed network connection") {
 			panic(ErrClosed)
 		} else {
-			log.Warn("ring buffer read error")
 			panic(ErrReadError)
 		}
 	}
@@ -96,8 +100,7 @@ func (r *RingBuffer) readToPos(pos int) {
 
 func (r *RingBuffer) Move(step int) {
 	if (r.dist(r.pos) + step) >= r.size {
-		log.Error("ring buffer overflow")
-		panic(ErrReadError)
+		panic(ErrOverflow)
 	}
 
 	r.pos = r.norm(r.pos + step)
@@ -138,7 +141,7 @@ func (r *RingBuffer) get(from int, to int) []byte {
 	r.readToPos(to)
 
 	from = r.norm(from)
-	to = r.norm(to - 1) + 1
+	to = r.norm(to-1) + 1
 
 	s := r.norm(to - from)
 	b := make([]byte, s)
@@ -147,7 +150,7 @@ func (r *RingBuffer) get(from int, to int) []byte {
 		copy(b, r.buf[from:to])
 	} else if from > to {
 		copy(b, r.buf[from:])
-		copy(b[r.size - from:], r.buf[:to])
+		copy(b[r.size-from:], r.buf[:to])
 	}
 
 	return b

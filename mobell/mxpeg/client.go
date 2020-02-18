@@ -44,6 +44,8 @@ type Client struct {
 
 	packetId uint32
 	events   sync.Map
+
+	log log.Interface
 }
 
 func NewClient(mobotixAddr string, mobotixUser string, mobotixPass string, listener *Listener) *Client {
@@ -57,19 +59,28 @@ func NewClient(mobotixAddr string, mobotixUser string, mobotixPass string, liste
 		runCancel:   cancel,
 		runFinished: make(chan struct{}),
 		listener:    listener,
+
+		log: log.WithField("ctx", mobotixAddr),
 	}
 }
 
 func (c *Client) Start() {
+	c.log.Debug("starting")
 	go c.run()
 }
 
 func (c *Client) Stop() {
+	c.log.Debug("stopping")
+
 	c.runCancel()
 	<-c.runFinished
+
+	c.log.Debug("stopped")
 }
 
 func (c *Client) Reconnect() {
+	c.log.Debug("requesting reconnect")
+
 	s := (*stream.Stream)(atomic.LoadPointer(&c.stream))
 	if s != nil {
 		s.Close()
@@ -104,7 +115,7 @@ func (c *Client) runOnce() {
 
 	defer s.Close()
 
-	rb := NewRingBuffer(ringBufferSize, s)
+	rb := NewRingBuffer(ringBufferSize, s, c.log)
 
 	host := strings.FieldsFunc(c.mobotixAddr, func(r rune) bool { return r == ':' })[0]
 	auth := base64.StdEncoding.EncodeToString([]byte(c.mobotixUser + ":" + c.mobotixPass))
@@ -119,11 +130,11 @@ func (c *Client) runOnce() {
 
 	status, err := handleHttp(rb)
 	if err != nil {
-		log.WithError(err).Warn("error connecting")
+		c.log.WithError(err).Warn("error connecting")
 		return
 	}
 	if status != http.StatusOK {
-		log.WithField("status", status).Warn("error connecting")
+		c.log.WithField("status", status).Warn("error connecting")
 		return
 	}
 
@@ -140,11 +151,12 @@ func (c *Client) runOnce() {
 		c.listener.OnStreamStart()
 	}
 
-	pr := NewReader(c.OnEvent, c.OnVideo, c.OnAudio, rb)
+	pr := NewReader(c.OnEvent, c.OnVideo, c.OnAudio, rb, c.log)
 
 	for {
 		err := pr.ReadPacket()
 		if err != nil {
+			c.log.WithField("error", err.Error()).Warn("error reading packet")
 			break
 		}
 	}
@@ -154,7 +166,7 @@ func (c *Client) runOnce() {
 }
 
 func handleHttp(rb *RingBuffer) (status int, err error) {
-	defer Recover(&err)
+	defer rb.Recover(&err)
 
 	// get/post request
 	f := strings.Fields(ReadLine(rb))

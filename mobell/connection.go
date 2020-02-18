@@ -18,16 +18,21 @@ type connection struct {
 
 	videoEnabled bool
 	bellEvtId    int
+
+	log log.Interface
 }
 
 func handleConnection(ctx context.Context, conn net.Conn, server *Server) {
-	str := stream.NewStream(ctx, conn)
+	l := log.WithField("ctx", conn.RemoteAddr().String())
+
+	str := stream.NewStream(ctx, conn, l)
 	str.ReadTimeout = time.Second * 180
 
 	c := &connection{
 		server: server,
-		rb:     mxpeg.NewRingBuffer(16*1024, str),
+		rb:     mxpeg.NewRingBuffer(128*1024, str, l),
 		str:    str,
+		log:    l,
 	}
 	go c.run()
 }
@@ -39,11 +44,11 @@ func (c *connection) send(data []byte) {
 func (c *connection) sendEvent(evt map[string]interface{}) {
 	b, err := json.Marshal(evt)
 	if err != nil {
-		log.WithError(err).Error("error marshalling event")
+		c.log.WithError(err).Error("error marshalling event")
 		return
 	}
 
-	log.WithField("evt", string(b)).Debug("sending client event")
+	c.log.WithField("evt", string(b)).Debug("sending client event")
 
 	l := len(b) + 2
 
@@ -79,12 +84,12 @@ func (c *connection) run() {
 		str.Close()
 	}()
 
-	rb := mxpeg.NewRingBuffer(16*1024, str)
+	rb := mxpeg.NewRingBuffer(16*1024, str, c.log)
 
 	// http part
 	err := handleHttp(rb)
 	if err != nil {
-		log.WithError(err).Error("error reading http request headers")
+		c.log.WithError(err).Error("error reading http request headers")
 		return
 	}
 
@@ -94,7 +99,7 @@ func (c *connection) run() {
 	for {
 		data, err := readEvt(rb)
 		if err != nil {
-			log.WithError(err).Error("error reading event")
+			c.log.WithError(err).Error("error reading event")
 			break
 		}
 
@@ -109,13 +114,13 @@ func (c *connection) run() {
 				c.server.audioData(c, data)
 			}
 		} else {
-			log.WithField("evt", string(data)).Debug("got client event")
+			c.log.WithField("evt", string(data)).Debug("got client event")
 
 			var evt map[string]interface{}
 
 			err := json.Unmarshal(data, &evt)
 			if err != nil {
-				log.WithError(err).Error("error unmarshalling event")
+				c.log.WithError(err).Error("error unmarshal event")
 				break
 			}
 
@@ -156,7 +161,7 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 }
 
 func handleHttp(rb *mxpeg.RingBuffer) (err error) {
-	defer mxpeg.Recover(&err)
+	defer rb.Recover(&err)
 
 	for {
 		line := mxpeg.ReadLine(rb)
@@ -169,12 +174,12 @@ func handleHttp(rb *mxpeg.RingBuffer) (err error) {
 }
 
 func readEvt(rb *mxpeg.RingBuffer) (data []byte, err error) {
-	defer mxpeg.Recover(&err)
+	defer rb.Recover(&err)
 
 	if rb.Get() == 0xff {
 		rb.Move(1)
 		if rb.Next() != 0xeb {
-			return nil, mxpeg.ErrReadError
+			return nil, mxpeg.ErrParseError
 		}
 
 		l := (rb.Next() << 8) | rb.Next()
@@ -190,7 +195,7 @@ func readEvt(rb *mxpeg.RingBuffer) (data []byte, err error) {
 		}
 
 		if rb.Next() != 0x00 {
-			return nil, mxpeg.ErrReadError
+			return nil, mxpeg.ErrParseError
 		}
 
 		rb.Move(-2)

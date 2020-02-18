@@ -2,8 +2,11 @@ package mxpeg
 
 import (
 	"encoding/json"
+	"errors"
 	"mobell-proxy/log"
 )
+
+var ErrParseError = errors.New("parse error")
 
 // markers
 const SOI = 0xD8
@@ -11,6 +14,7 @@ const APP0 = 0xE0
 const COM = 0xFE
 const DQT = 0xDB
 const DHT = 0xC4
+
 //const DRI = 0xDD
 const SOF0 = 0xC0
 const SOS = 0xDA
@@ -23,26 +27,30 @@ type EventFunc func(map[string]interface{}) bool
 type VideoFunc func([]byte, bool)
 type AudioFunc func([]byte)
 
-type MxpegPacketReader struct {
+type PacketReader struct {
 	onEvent EventFunc
 	onVideo VideoFunc
 	onAudio AudioFunc
 	reader  *RingBuffer
+
+	log log.Interface
 }
 
-func NewReader(onEvent EventFunc, onVideo VideoFunc, onAudio AudioFunc, reader *RingBuffer) *MxpegPacketReader {
-	return &MxpegPacketReader{
+func NewReader(onEvent EventFunc, onVideo VideoFunc, onAudio AudioFunc, reader *RingBuffer, log log.Interface) *PacketReader {
+	return &PacketReader{
 		onEvent: onEvent,
 		onVideo: onVideo,
 		onAudio: onAudio,
 		reader:  reader,
+
+		log: log,
 	}
 }
 
-func (p *MxpegPacketReader) ReadPacket() (err error) {
-	defer Recover(&err)
-
+func (p *PacketReader) ReadPacket() (err error) {
 	r := p.reader
+
+	defer r.Recover(&err)
 
 	// skip garbage
 	for r.Next() != 0xff {
@@ -61,11 +69,11 @@ func (p *MxpegPacketReader) ReadPacket() (err error) {
 	case APP12:
 		return p.readEvents()
 	default:
-		return ErrReadError
+		return ErrParseError
 	}
 }
 
-func (p *MxpegPacketReader) readVideo() error {
+func (p *PacketReader) readVideo() error {
 	r := p.reader
 
 	frameStart := false
@@ -81,7 +89,7 @@ func (p *MxpegPacketReader) readVideo() error {
 		}
 
 		if marker != SOF0 && marker != SOS && marker != APP0 && marker != COM && marker != DQT && marker != DHT {
-			return ErrReadError
+			return ErrParseError
 		}
 
 		if marker == SOF0 {
@@ -110,7 +118,7 @@ func (p *MxpegPacketReader) readVideo() error {
 	return nil
 }
 
-func (p *MxpegPacketReader) readAudioAlaw() error {
+func (p *PacketReader) readAudioAlaw() error {
 	/*
 		r := p.reader
 
@@ -131,20 +139,20 @@ func (p *MxpegPacketReader) readAudioAlaw() error {
 	*/
 
 	// telling the truth, alaw packets are not really supported by clients
-	return ErrReadError
+	return ErrParseError
 }
 
-func (p *MxpegPacketReader) readAudioPcm() error {
+func (p *PacketReader) readAudioPcm() error {
 	r := p.reader
 
 	l := (r.Next() << 8) | r.Next()
 
 	if r.Next() != int('M') {
-		return ErrReadError
+		return ErrParseError
 	}
 
 	if r.Next() != int('X') {
-		return ErrReadError
+		return ErrParseError
 	}
 
 	t := r.Next()
@@ -160,7 +168,7 @@ func (p *MxpegPacketReader) readAudioPcm() error {
 	return nil
 }
 
-func (p *MxpegPacketReader) readEvents() error {
+func (p *PacketReader) readEvents() error {
 	r := p.reader
 
 	l := (r.Next() << 8) | r.Next()
@@ -175,10 +183,11 @@ func (p *MxpegPacketReader) readEvents() error {
 		v = v[:len(v)-1]
 	}
 
-	log.WithField("event", string(v)).Debug("received event")
+	p.log.WithField("event", string(v)).Debug("received event")
 
 	err := json.Unmarshal(v, &evt)
 	if err != nil {
+		p.log.Warn("error unmarshal event")
 		return err
 	}
 

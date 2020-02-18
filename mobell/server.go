@@ -78,6 +78,7 @@ func (s *Server) Start() error {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
+				log.Debug("finished accepting new connections")
 				break
 			}
 
@@ -100,6 +101,7 @@ func (s *Server) run() {
 		case _ = <-s.runCtx.Done():
 			close(s.runFinished)
 			_ = s.connListener.Close()
+			log.Debug("server finished run")
 			return
 		}
 	}

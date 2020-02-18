@@ -19,20 +19,22 @@ type Stream struct {
 	asyncCh *syncchan.Chan
 	syncCh  chan []byte
 	queue   *list.List
+
+	log log.Interface
 }
 
-func Connect(ctx context.Context, addr string, timeout time.Duration) (*Stream, error) {
+func Connect(ctx context.Context, addr string, timeout time.Duration, log log.Interface) (*Stream, error) {
 	conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		log.WithError(err).Error("error connecting to host")
 		return nil, err
 	}
 
-	return NewStream(ctx, conn), nil
+	return NewStream(ctx, conn, log), nil
 }
 
-func NewStream(ctx context.Context, conn net.Conn) *Stream {
-	_, cancel := context.WithCancel(ctx)
+func NewStream(ctx context.Context, conn net.Conn, log log.Interface) *Stream {
+	c, cancel := context.WithCancel(ctx)
 
 	s := &Stream{
 		ReadTimeout:  5 * time.Second,
@@ -44,6 +46,8 @@ func NewStream(ctx context.Context, conn net.Conn) *Stream {
 		asyncCh: syncchan.MakeChan(1),
 		syncCh:  make(chan []byte),
 		queue:   list.New(),
+
+		log: log,
 	}
 
 	go s.queueData()
@@ -51,7 +55,7 @@ func NewStream(ctx context.Context, conn net.Conn) *Stream {
 
 	go func() {
 		defer cancel()
-		_ = <-ctx.Done()
+		_ = <-c.Done()
 		s.close()
 	}()
 
@@ -99,6 +103,7 @@ func (s *Stream) queueData() {
 		case d, ok := <-s.asyncCh.Chan():
 			if !ok {
 				close(s.syncCh)
+				s.log.Debug("finished data queue")
 				return
 			}
 			s.queue.PushBack(d)
@@ -119,7 +124,7 @@ func (s *Stream) writeData() {
 			_ = s.conn.SetWriteDeadline(time.Now().Add(s.WriteTimeout))
 			nr, err := s.conn.Write(data)
 			if err != nil {
-				log.WithError(err).Warn("error writing data")
+				s.log.WithError(err).Warn("error writing data")
 				s.Close()
 				return
 			}
