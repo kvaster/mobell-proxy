@@ -7,6 +7,8 @@ import (
 	"mobell-proxy/mobell/codec"
 	"mobell-proxy/mobell/mxpeg"
 	"net"
+	"syscall"
+	"time"
 )
 
 var audioStopEvt = []byte{
@@ -84,6 +86,8 @@ func (s *Server) Start() error {
 
 			log.Debug("connection accepted")
 
+			s.setKeepalive(conn.(*net.TCPConn))
+
 			handleConnection(s.runCtx, conn, s)
 		}
 	}()
@@ -91,6 +95,38 @@ func (s *Server) Start() error {
 	go s.run()
 
 	return nil
+}
+
+func (s *Server) setKeepalive(conn *net.TCPConn) {
+	if conn.SetKeepAlive(true) != nil {
+		log.Warn("can't enable keepalive")
+	}
+
+	if conn.SetKeepAlivePeriod(time.Second * 120) != nil {
+		log.Warn("can't set keepalive period")
+	}
+
+	rawConn, err := conn.SyscallConn()
+	if err != nil {
+		log.Warn("can't get raw connection")
+		return
+	}
+
+	err = rawConn.Control(func(fdPtr uintptr) {
+		fd := int(fdPtr)
+
+		if syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, 3) != nil {
+			log.Warn("can't set number of probes")
+		}
+
+		if syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, 5) != nil {
+			log.Warn("can't set retry delay")
+		}
+	})
+
+	if err != nil {
+		log.Warn("can't set additional keepalive paramteres")
+	}
 }
 
 func (s *Server) run() {

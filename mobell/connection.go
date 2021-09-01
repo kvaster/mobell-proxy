@@ -77,9 +77,36 @@ func (c *connection) sendBell(isRing bool) {
 func (c *connection) run() {
 	c.server.addConnection(c)
 
+	doneCh := make(chan struct{})
+	updCh := make(chan struct{})
+	go func() {
+		const timeout = time.Second * 120
+
+		timer := time.NewTimer(timeout)
+		for {
+			select {
+			case _ = <- doneCh:
+				timer.Stop()
+				return
+			case _ = <- updCh:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(timeout)
+			case _ = <- timer.C:
+				c.sendEvent(map[string]interface{}{
+					"method": "ping",
+				})
+				timer.Reset(timeout)
+			}
+		}
+	}()
+
+
 	str := c.str
 
 	defer func() {
+		close(doneCh)
 		c.server.delConnection(c)
 		str.Close()
 	}()
@@ -102,6 +129,8 @@ func (c *connection) run() {
 			c.log.WithError(err).Error("error reading event")
 			break
 		}
+
+		updCh <- struct{}{}
 
 		if data[0] == 0xff {
 			if len(data) == 22 && data[6] == 0x53 {
@@ -155,6 +184,8 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 		c.server.bellAck(c)
 	case "register_device":
 		c.server.registerBell(c, id)
+	case "pong":
+		return
 	}
 
 	c.sendEvent(map[string]interface{}{"result": r, "error": nil, "id": id})
