@@ -3,10 +3,12 @@ package mobell
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"mobell-proxy/log"
 	"mobell-proxy/mobell/mxpeg"
 	"mobell-proxy/mobell/stream"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -19,6 +21,8 @@ type connection struct {
 	videoEnabled bool
 	bellEvtId    int
 
+	keepAliveSec int
+
 	log log.Interface
 }
 
@@ -29,10 +33,11 @@ func handleConnection(ctx context.Context, conn net.Conn, server *Server) {
 	str.ReadTimeout = time.Second * 180
 
 	c := &connection{
-		server: server,
-		rb:     mxpeg.NewRingBuffer(128*1024, str, l),
-		str:    str,
-		log:    l,
+		server:       server,
+		rb:           mxpeg.NewRingBuffer(256*1024, str, l),
+		str:          str,
+		log:          l,
+		keepAliveSec: server.keepAliveSec,
 	}
 	go c.run()
 }
@@ -80,7 +85,7 @@ func (c *connection) run() {
 	doneCh := make(chan struct{})
 	updCh := make(chan struct{})
 	go func() {
-		const timeout = time.Second * 120
+		timeout := time.Second * time.Duration(c.keepAliveSec)
 
 		timer := time.NewTimer(timeout)
 		for {
@@ -114,7 +119,7 @@ func (c *connection) run() {
 	rb := mxpeg.NewRingBuffer(16*1024, str, c.log)
 
 	// http part
-	err := handleHttp(rb)
+	err := c.handleHttp(rb)
 	if err != nil {
 		c.log.WithError(err).Error("error reading http request headers")
 		return
@@ -191,14 +196,37 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 	c.sendEvent(map[string]interface{}{"result": r, "error": nil, "id": id})
 }
 
-func handleHttp(rb *mxpeg.RingBuffer) (err error) {
+func (c *connection) handleHttp(rb *mxpeg.RingBuffer) (err error) {
 	defer rb.Recover(&err)
+
+	cmdHandled := false
 
 	for {
 		line := mxpeg.ReadLine(rb)
 		if len(line) == 0 {
 			break
 		}
+
+		if strings.HasPrefix(line, "GET ") || strings.HasPrefix(line, "POST ") {
+			verbs := strings.Fields(line)
+			if len(verbs) > 1 {
+				cmd := verbs[1]
+
+				switch cmd {
+				case "/bell":
+					cmdHandled = true
+					c.server.sendBell(true)
+				case "/nobell":
+					cmdHandled = true
+					c.server.sendBell(false)
+				}
+			}
+		}
+	}
+
+	if cmdHandled {
+		c.send([]byte("HTTP/1.1 200 OK\r\n\r\nCommand applied\r\n"))
+		return errors.New("command applied")
 	}
 
 	return nil

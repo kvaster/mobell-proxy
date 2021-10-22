@@ -5,7 +5,7 @@ typedef struct
 {
     unsigned char* data;
     size_t size;
-    AVPacket pkt;
+    AVPacket *pkt;
 } Packet;
 
 void* create();

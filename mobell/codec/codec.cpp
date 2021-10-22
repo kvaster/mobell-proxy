@@ -29,6 +29,8 @@ private:
 
     AVCodec* jpegCodec;
 
+    AVPacket* pkt;
+
     pthread_mutex_t videoMutex;
 };
 
@@ -78,10 +80,14 @@ Codec::Codec()
     videoWorkFrame = av_frame_alloc();
 
     jpegCodec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
+
+    pkt = av_packet_alloc();
 }
 
 Codec::~Codec()
 {
+    av_packet_free(&pkt);
+
     avcodec_free_context(&videoCodecCtx);
     av_frame_free(&videoFrame);
     av_frame_free(&videoWorkFrame);
@@ -105,13 +111,10 @@ void Codec::OnStreamStop()
 
 bool Codec::OnVideoPacket(unsigned char* data, size_t size)
 {
-    AVPacket pkt;
-    av_init_packet(&pkt);
+    pkt->data = data;
+    pkt->size = size;
 
-    pkt.data = data;
-    pkt.size = size;
-
-    avcodec_send_packet(videoCodecCtx, &pkt);
+    avcodec_send_packet(videoCodecCtx, pkt);
 
     pthread_mutex_lock(&videoMutex);
 
@@ -146,9 +149,7 @@ Packet* Codec::EncodeFrame()
     Packet* p = new Packet();
     p->data = nullptr;
     p->size = 0;
-    p->pkt.data = nullptr;
-    p->pkt.size = 0;
-    av_init_packet(&p->pkt);
+    p->pkt = av_packet_alloc();
 
     pthread_mutex_lock(&videoMutex);
 
@@ -166,18 +167,18 @@ Packet* Codec::EncodeFrame()
 
     pthread_mutex_unlock(&videoMutex);
 
-    avcodec_receive_packet(jpegCodecCtx, &p->pkt);
+    avcodec_receive_packet(jpegCodecCtx, p->pkt);
 
     avcodec_close(jpegCodecCtx);
 
-    p->data = p->pkt.data;
-    p->size = p->pkt.size;
+    p->data = p->pkt->data;
+    p->size = p->pkt->size;
 
     return p;
 }
 
 void Codec::ResetEncoder(Packet* p)
 {
-    av_packet_unref(&p->pkt);
+    av_packet_free(&p->pkt);
     delete p;
 }

@@ -17,8 +17,9 @@ var audioStopEvt = []byte{
 }
 
 type Server struct {
-	listenAddr string
-	mac        string
+	listenAddr   string
+	mac          string
+	keepAliveSec int
 
 	conns     *list.List
 	audioConn *connection
@@ -40,17 +41,18 @@ type Server struct {
 	patchDxt bool
 }
 
-func New(listenAddr string, mobotixAddr string, mobotixUser string, mobotixPass string, mac string) *Server {
+func New(listenAddr string, mobotixAddr string, mobotixUser string, mobotixPass string, mac string, keepAliveSec int) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &Server{
-		listenAddr:  listenAddr,
-		mac:         mac,
-		conns:       list.New(),
-		runCtx:      ctx,
-		runCancel:   cancel,
-		runFinished: make(chan struct{}),
-		cmdCh:       make(chan func()),
+		listenAddr:   listenAddr,
+		mac:          mac,
+		keepAliveSec: keepAliveSec,
+		conns:        list.New(),
+		runCtx:       ctx,
+		runCancel:    cancel,
+		runFinished:  make(chan struct{}),
+		cmdCh:        make(chan func()),
 	}
 
 	s.client = mxpeg.NewClient(mobotixAddr, mobotixUser, mobotixPass, &mxpeg.Listener{
@@ -181,15 +183,18 @@ func (s *Server) onBell(evt map[string]interface{}) bool {
 	if t == "bell" {
 		isRing := r.arrGet(1).asBool()
 		log.WithField("ringing", isRing).Debug("received bell")
-
-		s.cmdCh <- func() {
-			for e := s.conns.Front(); e != nil; e = e.Next() {
-				e.Value.(*connection).sendBell(isRing)
-			}
-		}
+		s.sendBell(isRing)
 	}
 
 	return false
+}
+
+func (s *Server) sendBell(isRing bool) {
+	s.cmdCh <- func() {
+		for e := s.conns.Front(); e != nil; e = e.Next() {
+			e.Value.(*connection).sendBell(isRing)
+		}
+	}
 }
 
 func (s *Server) OnStreamStop() {

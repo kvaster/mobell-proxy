@@ -15,6 +15,7 @@ var mobotixAddr = flag.String("mobotix.addr", "", "mobotix camera address (ip:po
 var mobotixUser = flag.String("mobotix.user", "", "mobotix camera user")
 var mobotixPass = flag.String("mobotix.pass", "", "mobotix camera password")
 var iface = flag.String("iface", "", "interface name for mac address detection")
+var keepAliveSeconds = flag.Int("keepalive", 90, "delay between ping in seconds")
 
 func main() {
 	flag.Parse()
@@ -52,7 +53,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	s := mobell.New(*listenAddr, *mobotixAddr, *mobotixUser, *mobotixPass, mac)
+	s := mobell.New(*listenAddr, *mobotixAddr, *mobotixUser, *mobotixPass, mac, *keepAliveSeconds)
 
 	if err := s.Start(); err != nil {
 		log.WithError(err).Error("error starting mobell proxy")
