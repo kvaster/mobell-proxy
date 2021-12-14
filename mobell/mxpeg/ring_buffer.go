@@ -2,8 +2,8 @@ package mxpeg
 
 import (
 	"errors"
+	"github.com/apex/log"
 	"io"
-	"mobell-proxy/log"
 	"strings"
 )
 

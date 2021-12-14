@@ -3,7 +3,7 @@ package mobell
 import (
 	"container/list"
 	"context"
-	"mobell-proxy/log"
+	"github.com/apex/log"
 	"mobell-proxy/mobell/codec"
 	"mobell-proxy/mobell/mxpeg"
 	"net"
@@ -104,7 +104,7 @@ func (s *Server) setKeepalive(conn *net.TCPConn) {
 		log.Warn("can't enable keepalive")
 	}
 
-	if conn.SetKeepAlivePeriod(time.Second * 120) != nil {
+	if conn.SetKeepAlivePeriod(time.Second*120) != nil {
 		log.Warn("can't set keepalive period")
 	}
 
@@ -205,7 +205,7 @@ func (s *Server) OnEvent(_ map[string]interface{}) bool {
 	return true
 }
 
-func (s *Server) sendVideo(data [] byte) {
+func (s *Server) sendVideo(data []byte) {
 	for e := s.conns.Front(); e != nil; e = e.Next() {
 		c := e.Value.(*connection)
 		if c.videoEnabled {

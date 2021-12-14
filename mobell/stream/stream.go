@@ -3,7 +3,7 @@ package stream
 import (
 	"container/list"
 	"context"
-	"mobell-proxy/log"
+	"github.com/apex/log"
 	"mobell-proxy/mobell/syncchan"
 	"net"
 	"time"

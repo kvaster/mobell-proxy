@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"mobell-proxy/log"
+	"github.com/apex/log"
 	"mobell-proxy/mobell/mxpeg"
 	"mobell-proxy/mobell/stream"
 	"net"
@@ -90,15 +90,15 @@ func (c *connection) run() {
 		timer := time.NewTimer(timeout)
 		for {
 			select {
-			case _ = <- doneCh:
+			case _ = <-doneCh:
 				timer.Stop()
 				return
-			case _ = <- updCh:
+			case _ = <-updCh:
 				if !timer.Stop() {
 					<-timer.C
 				}
 				timer.Reset(timeout)
-			case _ = <- timer.C:
+			case _ = <-timer.C:
 				c.sendEvent(map[string]interface{}{
 					"method": "ping",
 				})
@@ -106,7 +106,6 @@ func (c *connection) run() {
 			}
 		}
 	}()
-
 
 	str := c.str
 

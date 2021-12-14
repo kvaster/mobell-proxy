@@ -2,7 +2,8 @@ package main
 
 import (
 	"flag"
-	"mobell-proxy/log"
+	"github.com/apex/log"
+	"github.com/kvaster/apexutils"
 	"mobell-proxy/mobell"
 	"net"
 	"os"
@@ -19,7 +20,7 @@ var keepAliveSeconds = flag.Int("keepalive", 90, "delay between ping in seconds"
 
 func main() {
 	flag.Parse()
-	log.ParseFlags()
+	apexutils.ParseFlags()
 
 	log.Info("starting mobell proxy")
 

@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"mobell-proxy/log"
+	"github.com/apex/log"
 	"mobell-proxy/mobell/stream"
 	"net/http"
 	"strconv"

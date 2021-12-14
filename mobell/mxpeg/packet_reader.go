@@ -3,7 +3,7 @@ package mxpeg
 import (
 	"encoding/json"
 	"errors"
-	"mobell-proxy/log"
+	"github.com/apex/log"
 )
 
 var ErrParseError = errors.New("parse error")
