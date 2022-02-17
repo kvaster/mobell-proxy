@@ -329,7 +329,7 @@ func (s *Server) notifyOthers(conn *connection, na notifyAction) {
 		for e := s.conns.Front(); e != nil; e = e.Next() {
 			c := e.Value.(*connection)
 			if c != conn {
-				na(conn)
+				na(c)
 			}
 		}
 	}
