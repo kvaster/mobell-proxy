@@ -322,16 +322,24 @@ func (s *Server) registerBell(conn *connection, evtId int) {
 	}
 }
 
-func (s *Server) bellResp(conn *connection, method string, params interface{}) {
-	s.client.SendCmdSilent(method, params)
+type notifyAction func(*connection)
+
+func (s *Server) notifyOthers(conn *connection, na notifyAction) {
 	s.cmdCh <- func() {
 		for e := s.conns.Front(); e != nil; e = e.Next() {
 			c := e.Value.(*connection)
 			if c != conn {
-				c.sendBell(false)
+				na(conn)
 			}
 		}
 	}
+}
+
+func (s *Server) bellResp(conn *connection, method string, params interface{}) {
+	s.client.SendCmdSilent(method, params)
+	s.notifyOthers(conn, func(c *connection) {
+		c.sendBell(false)
+	})
 }
 
 func (s *Server) bellAck(conn *connection) {
@@ -343,5 +351,11 @@ func (s *Server) bellReject(conn *connection) {
 }
 
 func (s *Server) bellSupress(conn *connection) {
-	s.bellResp(conn, "stop", nil)
+	s.notifyOthers(conn, func(c *connection) {
+		c.sendSuppress()
+	})
+}
+
+func (s *Server) openDoor(conn *connection) {
+	s.bellResp(conn, "trigger", []interface{}{"door"})
 }

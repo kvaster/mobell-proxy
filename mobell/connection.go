@@ -79,6 +79,19 @@ func (c *connection) sendBell(isRing bool) {
 	}
 }
 
+func (c *connection) sendSuppress() {
+	// this is a non-standard event
+	// this event is supported ONLY by mobell application
+	if c.bellEvtId > 0 {
+		c.sendEvent(map[string]interface{}{
+			"result": []interface{}{"suppress"},
+			"type":   "cont",
+			"error":  nil,
+			"id":     c.bellEvtId,
+		})
+	}
+}
+
 func (c *connection) run() {
 	c.server.addConnection(c)
 
@@ -176,9 +189,8 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 	case "list_addressees":
 		r = [][]interface{}{{1, "MainBell", ""}}
 	case "trigger":
-		c.server.client.SendCmdSilent("trigger", params.v)
-		// always suppress bell after opening door
-		c.server.bellSupress(c)
+		// TODO check if param equals to ['door']
+		c.server.openDoor(c)
 	case "bell_ack":
 		isAck := params.arrGet(0).asBool()
 		if isAck {
@@ -186,8 +198,8 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 		} else {
 			c.server.bellReject(c)
 		}
-	case "stop":
-		c.server.bellAck(c)
+	case "suppress":
+		c.server.bellSupress(c)
 	case "register_device":
 		c.server.registerBell(c, id)
 	case "pong":
