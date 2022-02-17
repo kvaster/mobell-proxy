@@ -177,6 +177,8 @@ func (c *connection) handleEvt(id int, method string, params jsonValue) {
 		r = [][]interface{}{{1, "MainBell", ""}}
 	case "trigger":
 		c.server.client.SendCmdSilent("trigger", params.v)
+		// always suppress bell after opening door
+		c.server.bellSupress(c)
 	case "bell_ack":
 		isAck := params.arrGet(0).asBool()
 		if isAck {
