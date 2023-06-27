@@ -58,6 +58,7 @@ func main() {
 
 	if err := s.Start(); err != nil {
 		log.WithError(err).Error("error starting mobell proxy")
+		os.Exit(1)
 	}
 
 	stopChan := make(chan os.Signal)

@@ -22,12 +22,12 @@ public:
     void ResetEncoder(Packet* packet);
 
 private:
-    AVCodec* videoCodec;
+    const AVCodec* videoCodec;
     AVCodecContext* videoCodecCtx;
     AVFrame* videoFrame;
     AVFrame* videoWorkFrame;
 
-    AVCodec* jpegCodec;
+    const AVCodec* jpegCodec;
 
     AVPacket* pkt;
 
