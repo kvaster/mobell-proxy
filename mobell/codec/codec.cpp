@@ -169,7 +169,7 @@ Packet* Codec::EncodeFrame()
 
     avcodec_receive_packet(jpegCodecCtx, p->pkt);
 
-    avcodec_close(jpegCodecCtx);
+    avcodec_free_context(&jpegCodecCtx);
 
     p->data = p->pkt->data;
     p->size = p->pkt->size;
